@@ -1,0 +1,211 @@
+---
+title: "Webpage presentation with Plotly"
+author: "Natalia Ravinskaya"
+date: "July 28, 2020"
+output: ioslides_presentation
+---
+
+***
+
+This is a web page presentation created in R Markdown. 
+
+According to the terms of the assignment, this presentation contains the date of its creation (on the titel page).  
+
+And it also contains two plots created with Plotly. These plots show consequences of severe weather events in the United States from 1950 to November 2011.  
+
+For more details about the dataset and their processing see my course project <https://rpubs.com/NRavinskaya/554675> for the course "Reproducible Research".
+
+***
+
+Ten types of events that were most harmful with respect to population health.
+
+```{r plot1, echo=FALSE, message=FALSE}
+## 1. Across the United States, which types of events are most harmful with respect to population health?
+## 2. Across the United States, which types of events have the greatest economic consequences?
+
+## Data Processing
+### Loading data into R
+
+if(!file.exists("./repdata_data_StormData.csv.bz2")){
+    fileUrl <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+    download.file(fileUrl, destfile="repdata_data_StormData.csv.bz2")
+}
+rawdata <- read.csv("repdata_data_StormData.csv.bz2")
+
+### Parameters of interest
+
+library(dplyr)
+data <- select(rawdata, "EVTYPE", "FATALITIES":"CROPDMGEXP")
+
+### Non-zero observations
+
+dataNoZero <- subset(data, FATALITIES>0 | INJURIES>0 | PROPDMG>0 | CROPDMG>0)
+
+### Converting exponent column for property damage
+
+dataNoZero$PROPDMGEXP <- toupper(as.character(dataNoZero$PROPDMGEXP))
+uEXP <- unique(dataNoZero$PROPDMGEXP)
+
+x <- c("","-","+","0","2","3","4","5","6","7","H","K","M","B")
+y <- c(10^0,10^0,10^0,10^0,10^2,10^3,10^4,10^5,10^6,10^7,10^2,10^3,10^6,10^9)
+dataE <- data.frame(x,y)
+for (i in 1:nrow(dataE)) {
+dataNoZero <- mutate(dataNoZero,
+                     PROPDMGEXP=replace(PROPDMGEXP, PROPDMGEXP==dataE[i,1], dataE[i,2]))
+}
+
+### Converting exponent column for crop damage
+
+dataNoZero$CROPDMGEXP <- toupper(as.character(dataNoZero$CROPDMGEXP))
+uEXP <- unique(dataNoZero$CROPDMGEXP)
+
+x <- c("","?","0","K","M","B")
+y <- c(10^0,10^0,10^0,10^3,10^6,10^9)
+dataE <- data.frame(x,y)
+for (i in 1:nrow(dataE)) {
+    dataNoZero <- mutate(dataNoZero,
+                         CROPDMGEXP=replace(CROPDMGEXP, CROPDMGEXP==dataE[i,1], dataE[i,2]))
+}
+
+### Combining damage amounts
+
+dataNoZero$PROPDMGEXP <- as.numeric(dataNoZero$PROPDMGEXP)
+dataNoZero$CROPDMGEXP <- as.numeric(dataNoZero$CROPDMGEXP)
+
+dataNoZero <- dataNoZero %>%
+    mutate(PROPDMG=PROPDMG*PROPDMGEXP,
+           CROPDMG=CROPDMG*CROPDMGEXP) %>%
+    select(-c(PROPDMGEXP,CROPDMGEXP))
+
+### Cleaning event types
+#### Converting to lower-case and creating a list of event types
+
+dataNoZero$EVTYPE <- tolower(as.character(dataNoZero$EVTYPE))
+u <- unique(dataNoZero$EVTYPE)
+
+#### Example of data selection
+
+AstronomicalLowTide <- grep("low tid", u, value = T)
+dataNoZero$EVTYPE <- gsub(AstronomicalLowTide, "Astronomical Low Tide", dataNoZero$EVTYPE)
+data <- filter(dataNoZero, EVTYPE == "Astronomical Low Tide")
+dataNoZero <- anti_join(dataNoZero,data)
+u <- unique(dataNoZero$EVTYPE)
+
+#### Creating matrix for replacement
+
+dataM <- matrix(c("avalanc", "Avalanche",
+                  "bliz", "Blizzard",
+                  "surg|tid", "Storm Surge/Tide",
+                  "wind chil", "Cold/Wind Chill",
+                  "coastal flood", "Coastal Flood",
+                  "landslid", "Debris Flow",
+                  "freezing fog", "Freezing Fog",
+                  "fog", "Dense Fog",
+                  "dense smoke", "Dense Smoke",
+                  "drought", "Drought",
+                  "devil", "Dust Devil",
+                  "dust", "Dust Storm",
+                  "excessive heat", "Excessive Heat",
+                  "extrem. cold|wind chil|windchil", "Extreme Cold/Wind Chill",
+                  "cold", "Cold/Wind Chill",
+                  "flash", "Flash Flood",
+                  "lakeshore flood", "Lakeshore Flood",
+                  "flood", "Flood",
+                  "frost|freeze", "Frost/Freeze",
+                  "funnel cloud", "Funnel Cloud",
+                  "lightning", "Lightning",
+                  "marine hail", "Marine Hail",
+                  "marine thunderstorm|marine tstm", "Marine Thunderstorm Wind",
+                  "torn", "Tornado",
+                  "hail", "Hail",
+                  "tstm|tund|thu", "Thunderstorm Wind",
+                  "heat", "Heat",
+                  "heavy rain|hvy|rainfall|shower", "Heavy Rain",
+                  "effect|lake snow", "Lake-Effect Snow",
+                  "heavy snow", "Heavy Snow",
+                  "rip current", "Rip Current",
+                  "surf", "High Surf",
+                  "marine high wind", "Marine High Wind",
+                  "marine strong wind", "Marine Strong Wind",
+                  "high wind", "High Wind",
+                  "hurricane|typhoon", "Hurricane (Typhoon)",
+                  "seiche", "Seiche",
+                  "sleet", "Sleet",
+                  "ice", "Ice Storm",
+                  "strong wind", "Strong Wind",
+                  "waterspout", "Waterspout",
+                  "depres", "Tropical Depression",
+                  "tropical storm", "Tropical Storm",
+                  "tsunam", "Tsunami",
+                  "volcanic ash", "Volcanic Ash",
+                  "fire", "Wildfire",
+                  "winter storm", "Winter Storm",
+                  "winter weather|freezing", "Winter Weather"),
+                ncol = 2, byrow = T)
+
+#### Processing and Transfer
+
+for (i in 1:nrow(dataM)) {
+    x <- grep(dataM[i,1], u, value = T)
+    for (j in 1:length(x)) {
+        dataNoZero <- mutate(dataNoZero, EVTYPE=replace(EVTYPE, EVTYPE==x[j], dataM[i,2]))
+    }
+    a <- filter(dataNoZero, EVTYPE == dataM[i,2])
+    data <- bind_rows(data,a)
+    dataNoZero <- anti_join(dataNoZero,data)
+    u <- unique(dataNoZero$EVTYPE)
+}
+
+## Results
+## Ten types of events that were most harmful with respect to population health.
+
+ph <- data %>%
+    group_by(EVTYPE) %>%
+    summarise(dead=sum(FATALITIES),
+              injured=sum(INJURIES),
+              total=dead+injured) %>%
+    arrange(desc(total))
+ph10 <- head(ph, 10)
+
+library(tidyr)
+ph10_long <-gather(ph10, people, number, -EVTYPE)
+
+
+# load packages
+library(plotly)
+library(ggplot2)
+
+g1 <- ggplot(ph10_long, aes(reorder(EVTYPE, -number), number)) +
+    geom_bar(stat="identity", aes(fill=people), position="dodge") +
+    labs(x="Event Type", y="Frequency Count") +
+    theme(axis.text.x = element_text(angle=45, hjust=1))
+
+(gg1 <- ggplotly(g1))
+```
+
+***
+
+Ten types of events that had the greatest economic consequences.
+
+```{r plot2, echo=FALSE, message=FALSE}
+## Ten types of events that had the greatest economic consequences.
+
+ec <- data %>%
+    group_by(EVTYPE) %>%
+    summarise(property=sum(PROPDMG),
+              crop=sum(CROPDMG),
+              total=property+crop) %>%
+    arrange(desc(total))
+ec10 <- head(ec, 10)
+
+ec10_long <-gather(ec10, damage, amount, -EVTYPE)
+
+g2 <- ggplot(ec10_long, aes(reorder(EVTYPE, -amount), amount)) +
+    geom_bar(stat="identity", aes(fill=damage), position="dodge") +
+    labs(x="Event Type", y="Frequency Count") +
+    theme(axis.text.x = element_text(angle=45, hjust=1))
+
+(gg2 <- ggplotly(g2))
+```
+
+
